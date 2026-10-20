@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Industry 4.0 Predictive Maintenance Engine</title>
+  <!-- Tailwind CSS, Vue 3, Chart.js & Google Fonts -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;800&family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Plus Jakarta Sans', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+          colors: {
+            industry: {
+              950: '#070A10',
+              900: '#0C101A',
+              850: '#121826',
+              800: '#1A2234',
+              700: '#26334D',
+              neonCyan: '#00F2FE',
+              neonGreen: '#00F5A0',
+              neonAmber: '#FFB800',
+              neonRed: '#FF4560',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body { background-color: #070a10; color: #f3f4f6; }
+    .glass-card {
+      background: rgba(18, 24, 38, 0.75);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.07);
+    }
+    .glass-card-glow {
+      box-shadow: 0 0 25px -5px rgba(0, 242, 254, 0.12);
+    }
+    .pulse-glow-red {
+      box-shadow: 0 0 30px 2px rgba(255, 69, 96, 0.35);
+    }
+  </style>
+</head>
+<body class="p-4 md:p-8 font-sans antialiased min-h-screen">
+  <div id="app" class="max-w-[1600px] mx-auto space-y-6">
+
+    <!-- ========== Top Header & Sector Switcher ========== -->
+    <header class="glass-card rounded-2xl p-5 flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
+      <div class="flex items-center space-x-4">
+        <div class="p-3 bg-gradient-to-br from-cyan-500/20 to-blue-600/20 rounded-xl border border-cyan-500/30">
+          <span class="text-3xl">🏭</span>
+        </div>
+        <div>
+          <div class="flex items-center gap-3">
+            <h1 class="text-2xl md:text-3xl font-extrabold tracking-tight bg-gradient-to-r from-white via-slate-200 to-cyan-400 bg-clip-text text-transparent">
+              APEX Predictive Telemetry Engine
+            </h1>
+            <span class="bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 text-[10px] font-mono px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider">
+              Industry 4.0 Suite
+            </span>
+          </div>
+          <p class="text-xs text-slate-400 mt-1 flex items-center gap-2 font-mono">
+            <span>● MQTT Bus Active</span>
+            <span>&middot;</span>
+            <span>TimescaleDB Storage</span>
+            <span>&middot;</span>
+            <span class="text-cyan-400">ML Anomaly Detection (Z-Score &gt; 2.5σ)</span>
+          </p>
+        </div>
+      </div>
+
+      <!-- Facility Sector Selector -->
+      <div class="flex flex-wrap items-center gap-3 w-full xl:w-auto">
+        <div class="flex items-center bg-industry-900 border border-slate-800 rounded-xl p-1">
+          <button v-for="sector in sectors" :key="sector.id" @click="activeSector = sector.id"
+                  :class="activeSector === sector.id ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40' : 'text-slate-400 hover:text-white border-transparent'"
+                  class="px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all duration-200 flex items-center space-x-1">
+            <span>{{ sector.icon }}</span>
+            <span>{{ sector.name }}</span>
+          </button>
+        </div>
+
+        <button @click="triggerManualFault" :disabled="isInjecting"
+                class="bg-gradient-to-r from-red-600 to-pink-600 hover:from-red-500 hover:to-pink-500 active:scale-95 disabled:opacity-50 text-white font-extrabold text-xs py-2.5 px-4 rounded-xl shadow-lg transition-all duration-150 flex items-center space-x-2 border border-red-400/40">
+          <span>⚡</span>
+          <span>{{ isInjecting ? 'Escalating Telemetry...' : 'Inject Fault (Demo)' }}</span>
+        </button>
+
+        <div :class="wsConnected ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-red-500/10 text-red-400 border-red-500/30'"
+             class="px-3.5 py-2 rounded-xl text-xs font-mono font-bold border flex items-center space-x-2">
+          <span class="w-2 h-2 rounded-full animate-ping" :class="wsConnected ? 'bg-emerald-400' : 'bg-red-400'"></span>
+          <span>{{ wsConnected ? 'LIVE WS CONNECTED' : 'DISCONNECTED' }}</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- ========== Industrial Financial & Fleet Operational Overview ========== -->
+    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+      <div class="glass-card p-4 rounded-2xl border-l-4 border-l-cyan-500">
+        <div class="text-xs text-slate-400 uppercase tracking-wider font-semibold">Total Assets</div>
+        <div class="text-3xl font-extrabold mt-1 font-mono text-white">{{ summary.total }}</div>
+        <div class="text-[10px] text-slate-500 mt-1">Active IoT Nodes</div>
+      </div>
+
+      <div class="glass-card p-4 rounded-2xl border-l-4 border-l-emerald-500">
+        <div class="text-xs text-slate-400 uppercase tracking-wider font-semibold">Healthy Assets</div>
+        <div class="text-3xl font-extrabold mt-1 font-mono text-emerald-400">{{ summary.healthy }}</div>
+        <div class="text-[10px] text-emerald-500/80 mt-1">Operating Normally</div>
+      </div>
+
+      <div class="glass-card p-4 rounded-2xl border-l-4 border-l-amber-500">
+        <div class="text-xs text-slate-400 uppercase tracking-wider font-semibold">At Risk</div>
+        <div class="text-3xl font-extrabold mt-1 font-mono text-amber-400">{{ summary.atRisk }}</div>
+        <div class="text-[10px] text-amber-500/80 mt-1">Degradation Detected</div>
+      </div>
+
+      <div class="glass-card p-4 rounded-2xl border-l-4 border-l-red-500">
+        <div class="text-xs text-slate-400 uppercase tracking-wider font-semibold">Critical State</div>
+        <div class="text-3xl font-extrabold mt-1 font-mono text-red-400">{{ summary.critical }}</div>
+        <div class="text-[10px] text-red-500/80 mt-1">Immediate Action Req.</div>
+      </div>
+
+      <div class="glass-card p-4 rounded-2xl border-l-4 border-l-blue-500">
+        <div class="text-xs text-slate-400 uppercase tracking-wider font-semibold">Avg Fleet Health</div>
+        <div class="text-3xl font-extrabold mt-1 font-mono text-blue-400">{{ summary.avgHealth }}%</div>
+        <div class="text-[10px] text-slate-500 mt-1">Overall Integrity</div>
+      </div>
+
+      <div class="glass-card p-4 rounded-2xl border-l-4 border-l-purple-500 bg-purple-950/10">
+        <div class="text-xs text-slate-400 uppercase tracking-wider font-semibold">Cost Avoidance</div>
+        <div class="text-2xl font-extrabold mt-1 font-mono text-purple-300">${{ (summary.critical * 45000 + summary.atRisk * 12500).toLocaleString() }}</div>
+        <div class="text-[10px] text-purple-400 mt-1">Est. Savings Today</div>
+      </div>
+    </div>
+
+    <!-- ========== Asset Selector & Alert Banner ========== -->
+    <div class="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 glass-card p-4 rounded-2xl">
+      <div class="flex items-center space-x-3">
+        <span class="text-xs uppercase font-extrabold tracking-wider text-slate-400 font-mono">Target Machine:</span>
+        <select v-model="selectedMachineId" @change="onSelectMachine"
+                class="bg-industry-900 border border-slate-700 text-cyan-300 text-sm font-mono font-bold rounded-xl px-4 py-2 focus:outline-none focus:border-cyan-500">
+          <option v-for="id in machineIds" :key="id" :value="id">{{ id }} - Industrial Asset Node</option>
+        </select>
+        <span v-if="selectedMachine" :class="statusBadgeClass(selectedMachine.machine_status)"
+              class="px-3 py-1 rounded-full text-xs font-extrabold font-mono border">
+          {{ selectedMachine.machine_status || 'INITIALIZING' }}
+        </span>
+      </div>
+
+      <div class="flex items-center space-x-3">
+        <button @click="openWorkOrderModal"
+                class="bg-industry-800 hover:bg-slate-700 border border-slate-600 text-slate-200 text-xs font-bold px-4 py-2 rounded-xl transition-all flex items-center space-x-2">
+          <span>📋</span>
+          <span>Dispatch Work Order Ticket</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Critical Anomaly Banner -->
+    <div v-if="selectedMachine && selectedMachine.is_anomaly_detected"
+         class="p-4 bg-red-950/40 border border-red-500/80 rounded-2xl text-red-400 flex items-center justify-between pulse-glow-red animate-pulse">
+      <div class="flex items-center space-x-4">
+        <div class="p-3 bg-red-500/20 rounded-xl border border-red-500/40 text-2xl">🚨</div>
+        <div>
+          <h3 class="font-extrabold text-lg tracking-wide text-red-300">CRITICAL VIBRATION ANOMALY BREACH</h3>
+          <p class="text-xs text-red-400 font-mono">Statistical Z-Score threshold exceedance on node {{ selectedMachine.machine_id }}</p>
+        </div>
+      </div>
+      <div class="text-right font-mono">
+        <div class="text-xs text-red-400 uppercase">Live Amplitude</div>
+        <div class="text-2xl font-black text-red-200">{{ selectedMachine.vibration.toFixed(4) }} g</div>
+      </div>
+    </div>
+
+    <!-- ========== Core Sensor Metrics Grid ========== -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div class="glass-card p-6 rounded-2xl relative overflow-hidden">
+        <div class="flex justify-between items-start mb-4">
+          <div>
+            <span class="text-xs font-extrabold text-slate-400 uppercase tracking-wider">Thermal Dynamic Gradient</span>
+            <h4 class="text-sm font-semibold text-slate-200">Bearing Temperature</h4>
+          </div>
+          <span class="text-2xl p-2 bg-amber-500/10 rounded-xl border border-amber-500/20">🌡️</span>
+        </div>
+        <div class="text-4xl font-extrabold text-amber-400 font-mono tracking-tight">
+          {{ selectedMachine ? selectedMachine.temperature.toFixed(1) : '--' }} <span class="text-lg text-slate-500">°C</span>
+        </div>
+        <div class="mt-4 w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
+          <div class="bg-amber-400 h-full transition-all duration-300" :style="{ width: Math.min(100, (selectedMachine?.temperature || 0)) + '%' }"></div>
+        </div>
+        <div class="flex justify-between text-[10px] text-slate-500 mt-2 font-mono">
+          <span>Baseline: 60°C - 75°C</span>
+          <span>Max Operating: 120°C</span>
+        </div>
+      </div>
+
+      <div class="glass-card p-6 rounded-2xl relative overflow-hidden">
+        <div class="flex justify-between items-start mb-4">
+          <div>
+            <span class="text-xs font-extrabold text-slate-400 uppercase tracking-wider">Rotational Kinematics</span>
+            <h4 class="text-sm font-semibold text-slate-200">Spindle Speed</h4>
+          </div>
+          <span class="text-2xl p-2 bg-blue-500/10 rounded-xl border border-blue-500/20">⚙️</span>
+        </div>
+        <div class="text-4xl font-extrabold text-cyan-400 font-mono tracking-tight">
+          {{ selectedMachine ? selectedMachine.rpm.toFixed(0) : '--' }} <span class="text-lg text-slate-500">RPM</span>
+        </div>
+        <div class="mt-4 w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
+          <div class="bg-cyan-400 h-full transition-all duration-300" :style="{ width: Math.min(100, ((selectedMachine?.rpm || 0)/2000)*100) + '%' }"></div>
+        </div>
+        <div class="flex justify-between text-[10px] text-slate-500 mt-2 font-mono">
+          <span>Nominal: 1200 RPM</span>
+          <span>Rating Limit: 2200 RPM</span>
+        </div>
+      </div>
+
+      <div :class="selectedMachine && selectedMachine.is_anomaly_detected ? 'border-red-500/60 bg-red-950/20' : 'border-slate-800'"
+           class="glass-card p-6 rounded-2xl relative overflow-hidden transition-all duration-300">
+        <div class="flex justify-between items-start mb-4">
+          <div>
+            <span class="text-xs font-extrabold text-slate-400 uppercase tracking-wider">Acoustic & Structural Peak</span>
+            <h4 class="text-sm font-semibold text-slate-200">Vibration Harmonic</h4>
+          </div>
+          <span class="text-2xl p-2 bg-red-500/10 rounded-xl border border-red-500/20">📳</span>
+        </div>
+        <div :class="selectedMachine && selectedMachine.is_anomaly_detected ? 'text-red-400' : 'text-emerald-400'"
+             class="text-4xl font-extrabold font-mono tracking-tight">
+          {{ selectedMachine ? selectedMachine.vibration.toFixed(4) : '--' }} <span class="text-lg text-slate-500">g</span>
+        </div>
+        <div class="mt-4 w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
+          <div :class="selectedMachine && selectedMachine.is_anomaly_detected ? 'bg-red-500' : 'bg-emerald-400'"
+               class="h-full transition-all duration-300" :style="{ width: Math.min(100, ((selectedMachine?.vibration || 0)/0.5)*100) + '%' }"></div>
+        </div>
+        <div class="flex justify-between text-[10px] text-slate-500 mt-2 font-mono">
+          <span>Threshold: Z &gt; 2.5σ</span>
+          <span>Max Spectrum: 0.80 g</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========== Health Matrix, Risk Prediction & AI Diagnostics Copilot ========== -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <!-- Machine Integrity Radial Index -->
+      <div class="glass-card p-6 rounded-2xl flex flex-col items-center justify-between">
+        <div class="w-full flex justify-between items-center mb-2">
+          <span class="text-xs font-extrabold text-slate-400 uppercase tracking-wider">Health Index Score</span>
+          <span class="text-xs font-mono text-cyan-400">ISO 10816 Std</span>
+        </div>
+        <div class="relative w-36 h-36 flex items-center justify-center my-4">
+          <div class="absolute inset-0 rounded-full"
+               :style="ringStyle(selectedMachine ? selectedMachine.health_score : 0, healthColorHex(selectedMachine ? selectedMachine.health_status : null))"></div>
+          <div class="absolute inset-3 rounded-full bg-industry-900 flex flex-col items-center justify-center border border-slate-800">
+            <span class="text-3xl font-extrabold font-mono text-white">{{ selectedMachine ? selectedMachine.health_score : '--' }}</span>
+            <span class="text-[10px] font-mono text-slate-500">SCORE / 100</span>
+          </div>
+        </div>
+        <span :class="statusBadgeClass(selectedMachine ? selectedMachine.health_status : null)"
+              class="px-4 py-1.5 rounded-full text-xs font-extrabold font-mono border tracking-wider">
+          {{ selectedMachine ? selectedMachine.health_status : 'N/A' }}
+        </span>
+      </div>
+
+      <!-- ML Failure Probability Engine -->
+      <div class="glass-card p-6 rounded-2xl flex flex-col justify-between">
+        <div>
+          <div class="flex justify-between items-center mb-2">
+            <span class="text-xs font-extrabold text-slate-400 uppercase tracking-wider">ML Failure Risk Model</span>
+            <span class="text-[10px] font-mono bg-purple-500/20 text-purple-300 border border-purple-500/30 px-2 py-0.5 rounded">Random Forest Classifier</span>
+          </div>
+          <div class="text-4xl font-extrabold font-mono mt-2" :class="riskTextClass(selectedMachine ? selectedMachine.failure_risk : null)">
+            {{ selectedMachine ? Math.round(selectedMachine.failure_probability * 100) : '--' }}%
+          </div>
+          <p class="text-xs text-slate-400 mt-1">Predicted Breakdown Probability (Next 24h)</p>
+          <div class="w-full h-3 bg-slate-800 rounded-full mt-4 overflow-hidden border border-slate-700/50">
+            <div class="h-full rounded-full transition-all duration-500"
+                 :class="riskBgClass(selectedMachine ? selectedMachine.failure_risk : null)"
+                 :style="{ width: (selectedMachine ? Math.round(selectedMachine.failure_probability * 100) : 0) + '%' }"></div>
+          </div>
+        </div>
+
+        <div class="pt-4 border-t border-slate-800/80 flex justify-between items-center text-xs">
+          <span class="text-slate-400 font-medium">Risk Level Classification:</span>
+          <span class="font-extrabold font-mono uppercase px-2.5 py-1 rounded" :class="riskTextClass(selectedMachine ? selectedMachine.failure_risk : null)">
+            {{ selectedMachine ? selectedMachine.failure_risk : 'N/A' }}
+          </span>
+        </div>
+      </div>
+
+      <!-- Recommended Maintenance Action -->
+      <div class="glass-card p-6 rounded-2xl flex flex-col justify-between">
+        <div>
+          <span class="text-xs font-extrabold text-slate-400 uppercase tracking-wider">Prescriptive Action Engine</span>
+          <div class="mt-3 bg-industry-900/80 border border-slate-800 p-3.5 rounded-xl">
+            <div class="text-xs text-slate-500 font-mono uppercase">Automated Advisory</div>
+            <p class="text-sm font-bold text-slate-200 mt-1 flex items-start gap-2">
+              <span class="text-amber-400">⚡</span>
+              <span>{{ selectedMachine ? selectedMachine.maintenance_action : 'Awaiting sensor stream...' }}</span>
+            </p>
+          </div>
+        </div>
+
+        <div class="space-y-2 mt-4 pt-4 border-t border-slate-800/80 text-xs">
+          <div class="flex justify-between">
+            <span class="text-slate-400">Maintenance Priority:</span>
+            <span class="font-bold font-mono" :class="riskTextClass(selectedMachine ? selectedMachine.maintenance_priority : null)">
+              {{ selectedMachine ? selectedMachine.maintenance_priority : 'N/A' }}
+            </span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-slate-400">Root Fault Vector:</span>
+            <span class="font-bold text-slate-300 font-mono">{{ selectedMachine ? selectedMachine.possible_cause : '--' }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========== Explainability Diagnostics Panel ========== -->
+    <div class="glass-card rounded-2xl p-6">
+      <h3 class="text-sm font-extrabold uppercase tracking-wider text-slate-300 mb-3 flex items-center gap-2">
+        <span>🔍</span>
+        <span>AI Explainability Matrix (Root Cause Indicators)</span>
+      </h3>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div v-for="(reason, i) in (selectedMachine ? selectedMachine.prediction_reasons : [])" :key="i"
+             class="flex items-center space-x-3 bg-industry-900/60 border border-slate-800/80 rounded-xl px-4 py-2.5 text-xs text-slate-300">
+          <span class="text-cyan-400 font-bold">▶</span>
+          <span class="font-mono">{{ reason }}</span>
+        </div>
+        <div v-if="!selectedMachine || !selectedMachine.prediction_reasons?.length" class="text-slate-500 text-xs font-mono py-2">
+          All sensor metrics within nominal statistical distribution.
+        </div>
+      </div>
+    </div>
+
+    <!-- ========== Real-Time Charts & Embedded Grafana Dashboard ========== -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div class="glass-card rounded-2xl p-4">
+        <h3 class="text-xs font-extrabold uppercase tracking-wider text-slate-400 mb-3">Temperature Drift (°C)</h3>
+        <canvas ref="tempChartEl" height="150"></canvas>
+      </div>
+      <div class="glass-card rounded-2xl p-4">
+        <h3 class="text-xs font-extrabold uppercase tracking-wider text-slate-400 mb-3">Spindle Speed (RPM)</h3>
+        <canvas ref="rpmChartEl" height="150"></canvas>
+      </div>
+      <div class="glass-card rounded-2xl p-4">
+        <h3 class="text-xs font-extrabold uppercase tracking-wider text-slate-400 mb-3">Vibration Amplitude (g)</h3>
+        <canvas ref="vibChartEl" height="150"></canvas>
+      </div>
+    </div>
+
+    <!-- Grafana & Live Ingestion Table -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+      <!-- Grafana Embedded Frame -->
+      <div class="glass-card rounded-2xl p-6 flex flex-col h-[460px]">
+        <div class="flex justify-between items-center mb-4">
+          <div>
+            <h3 class="text-sm font-extrabold uppercase tracking-wider text-slate-200">Grafana Telemetry Analytics</h3>
+            <p class="text-[10px] text-slate-400 font-mono">TimescaleDB Hypertable Aggregation</p>
+          </div>
+          <a href="http://localhost:3000" target="_blank" class="text-xs text-cyan-400 hover:underline font-mono">Open Full Grafana ↗</a>
+        </div>
+        <div class="flex-grow rounded-xl overflow-hidden border border-slate-800 bg-industry-950 relative">
+          <iframe
+            src="http://localhost:3000/d/adb5gff/predictive-maintenance-trend?orgId=1&from=now-6h&to=now&timezone=browser&tab=queries&refresh=5s"
+            width="100%"
+            height="100%"
+            frameborder="0"
+            class="w-full h-full">
+          </iframe>
+        </div>
+      </div>
+
+      <!-- Live Stream Ingestion Table -->
+      <div class="glass-card rounded-2xl p-6 h-[460px] flex flex-col">
+        <div class="flex justify-between items-center mb-4">
+          <h3 class="text-sm font-extrabold uppercase tracking-wider text-slate-200">MQTT Live Pipeline Feed</h3>
+          <span class="text-[10px] font-mono bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 px-2 py-0.5 rounded">1000ms Poll Rate</span>
+        </div>
+        <div class="overflow-y-auto flex-grow rounded-xl border border-slate-800/80 bg-industry-950">
+          <table class="w-full text-left text-xs text-slate-300">
+            <thead class="bg-industry-900 text-slate-400 uppercase text-[10px] font-mono sticky top-0 border-b border-slate-800">
+              <tr>
+                <th class="p-3">Time</th>
+                <th class="p-3">Asset Node</th>
+                <th class="p-3">Temp</th>
+                <th class="p-3">RPM</th>
+                <th class="p-3">Vib (g)</th>
+                <th class="p-3">Status</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-800/50 font-mono text-[11px]">
+              <tr v-for="(item, index) in telemetryLog" :key="index" :class="item.is_anomaly_detected ? 'bg-red-500/10' : ''">
+                <td class="p-3 text-slate-400">{{ new Date(item.timestamp * 1000).toLocaleTimeString() }}</td>
+                <td class="p-3 font-semibold text-cyan-300">{{ item.machine_id }}</td>
+                <td class="p-3">{{ item.temperature.toFixed(1) }}°C</td>
+                <td class="p-3">{{ item.rpm.toFixed(0) }}</td>
+                <td class="p-3">{{ item.vibration.toFixed(4) }}</td>
+                <td class="p-3">
+                  <span :class="item.is_anomaly_detected ? 'text-red-400 bg-red-500/20 border-red-500/30' : 'text-emerald-400 bg-emerald-500/20 border-emerald-500/30'"
+                        class="px-2 py-0.5 rounded border text-[9px] font-bold">
+                    {{ item.is_anomaly_detected ? 'ANOMALY' : 'NORMAL' }}
+                  </span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Work Order Dispatch Modal -->
+    <div v-if="showWorkOrderModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+      <div class="glass-card border border-cyan-500/40 rounded-2xl p-6 max-w-lg w-full space-y-4">
+        <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+          <h3 class="font-extrabold text-lg text-white font-mono flex items-center gap-2">
+            <span>📋</span> WORK ORDER TICKET #WO-{{ Math.floor(1000 + Math.random() * 9000) }}
+          </h3>
+          <button @click="showWorkOrderModal = false" class="text-slate-400 hover:text-white text-xl">&times;</button>
+        </div>
+        
+        <div class="space-y-3 text-xs font-mono">
+          <div class="bg-industry-900 p-3 rounded-xl border border-slate-800">
+            <span class="text-slate-400">Target Asset:</span>
+            <span class="text-cyan-400 font-bold ml-2">{{ selectedMachineId }}</span>
+          </div>
+          <div class="bg-industry-900 p-3 rounded-xl border border-slate-800">
+            <span class="text-slate-400">Prescriptive Action:</span>
+            <p class="text-slate-200 mt-1 font-sans font-bold">{{ selectedMachine?.maintenance_action }}</p>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div class="bg-industry-900 p-3 rounded-xl border border-slate-800">
+              <span class="text-slate-400">Required Technician:</span>
+              <p class="text-white font-bold mt-1">Level-3 Industrial Millwright</p>
+            </div>
+            <div class="bg-industry-900 p-3 rounded-xl border border-slate-800">
+              <span class="text-slate-400">Estimated Downtime:</span>
+              <p class="text-amber-400 font-bold mt-1">45 Minutes</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex gap-3 pt-3">
+          <button @click="dispatchTicket" class="w-full bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold py-2.5 rounded-xl transition-all text-xs font-mono">
+            DISPATCH TO MAINTENANCE CREW
+          </button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    const { createApp, ref, reactive, computed, onMounted } = Vue;
+    const API_BASE = "http://localhost:8000";
+
+    createApp({
+      setup() {
+        const wsConnected = ref(false);
+        const machines = reactive({});
+        const selectedMachineId = ref(null);
+        const telemetryLog = ref([]);
+        const alerts = ref([]);
+        const isInjecting = ref(false);
+        const showWorkOrderModal = ref(false);
+        const activeSector = ref('auto');
+
+        const sectors = ref([
+          { id: 'auto', name: 'Automotive Plant', icon: '🚗' },
+          { id: 'aero', name: 'Aerospace Machining', icon: '✈️' },
+          { id: 'oil', name: 'Oil & Gas Refinery', icon: '🛢️' },
+          { id: 'semi', name: 'Semi Cleanroom', icon: '🔬' }
+        ]);
+
+        const tempChartEl = ref(null);
+        const rpmChartEl = ref(null);
+        const vibChartEl = ref(null);
+        let tempChart, rpmChart, vibChart;
+
+        const machineIds = computed(() => Object.keys(machines).sort());
+        const selectedMachine = computed(() => machines[selectedMachineId.value] || null);
+
+        const summary = computed(() => {
+          const list = Object.values(machines);
+          const total = list.length;
+          const healthy = list.filter(m => m.health_status === 'HEALTHY').length;
+          const critical = list.filter(m => m.health_status === 'CRITICAL' || m.failure_risk === 'CRITICAL').length;
+          const atRisk = list.filter(m => (m.health_status === 'WARNING' || m.failure_risk === 'HIGH' || m.failure_risk === 'MEDIUM') && !(m.health_status === 'CRITICAL' || m.failure_risk === 'CRITICAL')).length;
+          const avgHealth = total ? Math.round(list.reduce((s, m) => s + (m.health_score || 0), 0) / total) : 0;
+          return { total, healthy, atRisk, critical, avgHealth };
+        });
+
+        function statusBadgeClass(status) {
+          const map = {
+            HEALTHY: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
+            RUNNING: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
+            WARNING: 'bg-amber-500/10 text-amber-400 border-amber-500/30',
+            MEDIUM: 'bg-amber-500/10 text-amber-400 border-amber-500/30',
+            HIGH: 'bg-orange-500/10 text-orange-400 border-orange-500/30',
+            CRITICAL: 'bg-red-500/20 text-red-400 border-red-500/40',
+            OFFLINE: 'bg-slate-700/20 text-slate-400 border-slate-700/30',
+          };
+          return map[status] || 'bg-slate-700/20 text-slate-400 border-slate-700/30';
+        }
+        function riskTextClass(risk) {
+          const map = { LOW: 'text-emerald-400', MEDIUM: 'text-amber-400', HIGH: 'text-orange-400', CRITICAL: 'text-red-400' };
+          return map[risk] || 'text-slate-400';
+        }
+        function riskBgClass(risk) {
+          const map = { LOW: 'bg-emerald-400', MEDIUM: 'bg-amber-400', HIGH: 'bg-orange-400', CRITICAL: 'bg-red-400' };
+          return map[risk] || 'bg-slate-500';
+        }
+        function healthColorHex(status) {
+          const map = { HEALTHY: '#00F5A0', WARNING: '#FFB800', CRITICAL: '#FF4560' };
+          return map[status] || '#475569';
+        }
+        function ringStyle(score, colorHex) {
+          const pct = Math.max(0, Math.min(100, score || 0));
+          return { background: `conic-gradient(${colorHex} ${pct}%, #1a2234 ${pct}% 100%)`, borderRadius: '9999px' };
+        }
+
+        const triggerManualFault = async () => {
+          isInjecting.value = true;
+          try {
+            await fetch(`${API_BASE}/api/inject-fault?machine_id=${selectedMachineId.value || ''}`, { method: "POST" });
+          } catch (err) {
+            console.error("Fault injection trigger error:", err);
+          } finally {
+            setTimeout(() => { isInjecting.value = false; }, 1500);
+          }
+        };
+
+        function openWorkOrderModal() { showWorkOrderModal.value = true; }
+        function dispatchTicket() {
+          alert(`Work Order Dispatched for ${selectedMachineId.value}! Technician notified.`);
+          showWorkOrderModal.value = false;
+        }
+
+        function initCharts() {
+          const baseOpts = {
+            responsive: true,
+            animation: false,
+            plugins: { legend: { display: false } },
+            scales: {
+              x: { ticks: { color: '#64748b', maxTicksLimit: 6 }, grid: { color: 'rgba(255,255,255,0.05)' } },
+              y: { ticks: { color: '#64748b' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+            },
+          };
+          tempChart = new Chart(tempChartEl.value, { type: 'line', data: { labels: [], datasets: [{ data: [], borderColor: '#FFB800', tension: 0.3, pointRadius: 0 }] }, options: baseOpts });
+          rpmChart = new Chart(rpmChartEl.value, { type: 'line', data: { labels: [], datasets: [{ data: [], borderColor: '#00F2FE', tension: 0.3, pointRadius: 0 }] }, options: baseOpts });
+          vibChart = new Chart(vibChartEl.value, { type: 'line', data: { labels: [], datasets: [{ data: [], borderColor: '#FF4560', tension: 0.3, pointRadius: 0 }] }, options: baseOpts });
+        }
+
+        function pushChartPoint(chart, label, value) {
+          chart.data.labels.push(label);
+          chart.data.datasets[0].data.push(value);
+          if (chart.data.labels.length > 40) {
+            chart.data.labels.shift();
+            chart.data.datasets[0].data.shift();
+          }
+          chart.update('none');
+        }
+
+        async function seedCharts(machineId) {
+          [tempChart, rpmChart, vibChart].forEach(c => { c.data.labels = []; c.data.datasets[0].data = []; });
+          try {
+            const res = await fetch(`${API_BASE}/api/history/${machineId}`);
+            const history = await res.json();
+            history.forEach(item => {
+              const label = new Date(item.timestamp * 1000).toLocaleTimeString();
+              pushChartPoint(tempChart, label, item.temperature);
+              pushChartPoint(rpmChart, label, item.rpm);
+              pushChartPoint(vibChart, label, item.vibration);
+            });
+          } catch (err) { console.error("Error seeding charts:", err); }
+        }
+
+        function onSelectMachine() {
+          telemetryLog.value = [];
+          if (selectedMachineId.value) seedCharts(selectedMachineId.value);
+        }
+
+        function handleIncoming(data) {
+          machines[data.machine_id] = data;
+          if (!selectedMachineId.value) selectedMachineId.value = data.machine_id;
+
+          if (data.machine_id === selectedMachineId.value) {
+            telemetryLog.value.unshift(data);
+            if (telemetryLog.value.length > 12) telemetryLog.value.pop();
+
+            const label = new Date(data.timestamp * 1000).toLocaleTimeString();
+            pushChartPoint(tempChart, label, data.temperature);
+            pushChartPoint(rpmChart, label, data.rpm);
+            pushChartPoint(vibChart, label, data.vibration);
+          }
+        }
+
+        async function loadInitialData() {
+          try {
+            const res = await fetch(`${API_BASE}/api/machines`);
+            const machineList = await res.json();
+            machineList.forEach(m => { machines[m.machine_id] = m; });
+            if (machineList.length && !selectedMachineId.value) {
+              selectedMachineId.value = machineList[0].machine_id;
+            }
+          } catch (err) { console.error("Error loading initial machines:", err); }
+        }
+
+        onMounted(async () => {
+          initCharts();
+          await loadInitialData();
+          if (selectedMachineId.value) await seedCharts(selectedMachineId.value);
+
+          const ws = new WebSocket("ws://127.0.0.1:8000/ws/telemetry");
+          ws.onopen = () => { wsConnected.value = true; };
+          ws.onclose = () => { wsConnected.value = false; };
+          ws.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            handleIncoming(data);
+          };
+        });
+
+        return {
+          wsConnected, machines, machineIds, selectedMachineId, selectedMachine,
+          telemetryLog, alerts, isInjecting, summary, sectors, activeSector,
+          showWorkOrderModal, openWorkOrderModal, dispatchTicket,
+          tempChartEl, rpmChartEl, vibChartEl,
+          triggerManualFault, onSelectMachine,
+          statusBadgeClass, riskTextClass, riskBgClass, healthColorHex, ringStyle,
+        };
+      }
+    }).mount('#app');
+  </script>
+</body>
+</html>

@@ -1,0 +1,47 @@
+version: '3.8'
+
+# Infrastructure only. main.py, simulator.py and index.html continue to run
+# on the host and talk to these containers over localhost, exactly as in
+# the original project - no architecture change needed for this upgrade.
+
+services:
+  # 1. MQTT Broker (Ingestion pipeline)
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: telemetry_mqtt
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - mosquitto_data:/mosquitto/data
+
+  # 2. Time-Series Database (TimescaleDB / PostgreSQL)
+  timescaledb:
+    image: timescale/timescaledb:latest-pg15
+    container_name: telemetry_db
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: password123
+      POSTGRES_DB: telemetry_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - timescaledb_data:/var/lib/postgresql/data
+
+  # 3. Grafana (Dashboard Engine)
+  grafana:
+    image: grafana/grafana:latest
+    container_name: telemetry_grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_SECURITY_ALLOW_EMBEDDING=true
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
+    depends_on:
+      - timescaledb
+
+volumes:
+  mosquitto_data:
+  timescaledb_data:
